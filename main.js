@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { buildWorld } from './assets/world.js';
 import { initEconomy } from './assets/economy.js';
-const VERSION = '0.4', SAVE_KEY = 'sierrasol_save_v1';
+import { initNPCs } from './assets/npcs.js';
+const VERSION = '0.5', SAVE_KEY = 'sierrasol_save_v1';
 const $ = id => document.getElementById(id);
 const rand = s => () => ((s = (s * 16807) % 2147483647) / 2147483647);
 $('ver').textContent = 'v' + VERSION;
@@ -79,6 +80,14 @@ let msgT = 0; function showMsg(t, d = 2.5) { $('msg').textContent = t; $('msg').
 
 // ---------- economy ----------
 const economy = initEconomy({ THREE, scene, player, state, addCol, showMsg, cities: world.cities, isBusy: () => state.uiOpen });
+const npcs = initNPCs({ THREE, scene, world, player, vehicles, state, showMsg, settings });
+let lastPunch = false;
+function updatePunch() { const p = input.attack && !player.car, edge = p && !lastPunch; lastPunch = p; if (!edge) return;
+  for (const n of npcs.list) { const d = Math.hypot(n.x - player.x, n.z - player.z); if (n.mode === 'down' || d > 1.9 || Math.cos(Math.atan2(n.x - player.x, n.z - player.z) - player.heading) < 0.3) continue;
+    n.mode = 'down'; n.t = 4 + Math.random() * 2; n.fall = 0; n.vx = Math.sin(player.heading) * 4; n.vz = Math.cos(player.heading) * 4;
+    if (Math.random() < 0.4) { const c = 5 + ((Math.random() * 30) | 0); player.money += c; showMsg(`Pow!  +$${c}`, 1.2); } else showMsg('Pow!', 0.8);
+    for (const q of npcs.list) if (q !== n && q.mode !== 'down' && Math.hypot(q.x - n.x, q.z - n.z) < 30) { const a = Math.atan2(q.x - n.x, q.z - n.z); q.mode = 'flee'; q.t = 4; q.vx = Math.sin(a) * 4.5; q.vz = Math.cos(a) * 4.5; }
+    break; } }
 
 // ---------- car enter/exit ----------
 function toggleCar() {
@@ -201,7 +210,7 @@ function loop(now) {
   if (state.started && !state.paused && !state.uiOpen) {
     if (player.car) updateCar(player.car, dt); else updateFoot(dt);
     for (const v of vehicles) if (v !== player.car && (v.ai || Math.abs(v.speed) > 0.01)) updateCar(v, dt);
-    updateTraffic(dt);
+    updateTraffic(dt); npcs.update(dt); updatePunch();
     economy.update(dt);
   }
   player.mesh.position.set(player.x, player.y, player.z); player.mesh.rotation.y = player.heading; player.shadow.visible = !player.car; player.shadow.position.set(player.x, H(player.x, player.z) + 0.05, player.z);
@@ -210,4 +219,4 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
-window.__game = { player, state, vehicles, world, saveGame, loadGame, toggleCar };
+window.__game = { npcs, player, state, vehicles, world, saveGame, loadGame, toggleCar };
