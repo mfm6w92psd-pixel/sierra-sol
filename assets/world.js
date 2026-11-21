@@ -78,7 +78,7 @@ export function buildWorld({ THREE, scene, addCol, rand }) {
     for (let pass = 0; pass < 3; pass++) { const W = 14, o = H.slice(); for (let i = 0; i < H.length; i++) { let a = 0, c = 0; for (let k = -W; k <= W; k++) { const q = o[Math.min(H.length - 1, Math.max(0, i + k))]; a += q; c++; } H[i] = a / c; } }
     H = H.map((h, i) => Math.max(2, h, i < 3 || i > H.length - 4 ? baseAt(...S[i]) : 0));   // ends meet the town ground exactly
     for (let i = 0; i < 3; i++) H[i] = baseAt(...S[i]); for (let i = H.length - 3; i < H.length; i++) H[i] = baseAt(...S[i]);
-    const isSummit = /Summit/.test(hw.name), w = isSummit ? 12 : HW;
+    const isSummit = /Summit/.test(hw.name), w = isSummit ? 18 : HW;
     return { name: hw.name, S, H, w };
   });
   // spatial grid of highway segments
@@ -213,8 +213,9 @@ export function buildWorld({ THREE, scene, addCol, rand }) {
       const o = (py * 1000 + px) * 4; img.data[o] = C.r * 255; img.data[o + 1] = C.g * 255; img.data[o + 2] = C.b * 255; img.data[o + 3] = 255; }
     g.putImageData(img, 0, 0); const P = (x, z) => [(x + SIZE) / 12, (z + SIZE) / 12];
     g.fillStyle = '#9a9a92'; g.fillRect(...P(AIRPORT.x - AIRPORT.hx, AIRPORT.z - AIRPORT.hz), 2 * AIRPORT.hx / 12, 2 * AIRPORT.hz / 12);
-    for (const t of towns) { g.fillStyle = '#8f8f8f'; g.fillRect(...P(t.x - t.r, t.z - t.r), 2 * t.r / 12, 2 * t.r / 12); g.strokeStyle = '#5a5a5a'; g.lineWidth = 1; for (const s of streetSegs) { g.beginPath(); g.moveTo(...P(s.x1, s.z1)); g.lineTo(...P(s.x2, s.z2)); g.stroke(); } }
-    g.lineCap = 'round'; for (const h of highways) { g.strokeStyle = /Summit|Airport/.test(h.name) ? '#f2f2f2' : '#ffcc33'; g.lineWidth = /Summit|Airport/.test(h.name) ? 3 : 5; g.beginPath(); h.S.forEach(([x, z], i) => i ? g.lineTo(...P(x, z)) : g.moveTo(...P(x, z))); g.stroke(); }
+    for (const t of towns) { g.fillStyle = '#5c5f66'; g.fillRect(...P(t.x - t.r, t.z - t.r), 2 * t.r / 12, 2 * t.r / 12); }
+    g.strokeStyle = '#f4f4f4'; g.lineWidth = 2.2; g.lineCap = 'square'; for (const s of streetSegs) { g.beginPath(); g.moveTo(...P(s.x1, s.z1)); g.lineTo(...P(s.x2, s.z2)); g.stroke(); }
+    g.lineCap = 'round'; for (const h of highways) { g.strokeStyle = /Summit/.test(h.name) ? '#e0662f' : /Airport/.test(h.name) ? '#f2f2f2' : '#ffcc33'; g.lineWidth = /Summit|Airport/.test(h.name) ? 4 : 5; g.beginPath(); h.S.forEach(([x, z], i) => i ? g.lineTo(...P(x, z)) : g.moveTo(...P(x, z))); g.stroke(); }
     g.textAlign = 'center'; g.font = 'bold 26px sans-serif'; g.lineWidth = 5; g.strokeStyle = 'rgba(0,0,0,.7)'; g.fillStyle = '#fff';
     for (const t of CITIES) { g.strokeText(t.name, P(t.x, t.z)[0], P(t.x, t.z)[1] - t.r / 12 - 10); g.fillText(t.name, P(t.x, t.z)[0], P(t.x, t.z)[1] - t.r / 12 - 10); }
     g.font = 'bold 18px sans-serif'; for (const p of [...VILLAGES, { name: 'Mount Talon ▲', x: TALON.x, z: TALON.z + 40 }, { name: '✈ Airport', x: AIRPORT.x, z: AIRPORT.z + 330 }, { name: 'Halcyon Bay', x: -3300, z: -4300 }])

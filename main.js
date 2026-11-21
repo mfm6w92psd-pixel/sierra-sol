@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { buildWorld } from './assets/world.js';
 import { initEconomy } from './assets/economy.js';
-const VERSION = '0.3', SAVE_KEY = 'sierrasol_save_v1';
+const VERSION = '0.4', SAVE_KEY = 'sierrasol_save_v1';
 const $ = id => document.getElementById(id);
 const rand = s => () => ((s = (s * 16807) % 2147483647) / 2147483647);
 $('ver').textContent = 'v' + VERSION;
@@ -95,7 +95,7 @@ function updateFoot(dt) {
   let mx = input.mx + ((keys['d'] ? 1 : 0) - (keys['a'] ? 1 : 0)), my = input.my + ((keys['s'] ? 1 : 0) - (keys['w'] ? 1 : 0));
   const l = Math.min(1, Math.hypot(mx, my)), [fx, fz] = camFwd();
   if (l > 0.1) { const rx = -fz, rz = fx, dx = (fx * -my + rx * mx), dz = (fz * -my + rz * mx), n = Math.hypot(dx, dz) || 1;
-    const spd = (input.sprint || keys['shift'] ? 8 : 4) * l; let nx = player.x + dx / n * spd * dt, nz = player.z + dz / n * spd * dt;
+    const spd = (input.sprint || keys['shift'] ? 8 * (economy.sprintMultiplier?.() || 1) : 4) * l; let nx = player.x + dx / n * spd * dt, nz = player.z + dz / n * spd * dt;
     const ok = (x, z) => !hit(x, z, 0.35) && !WET(x, z) && H(x, z) - player.y < 1.2;
     if (ok(nx, player.z)) player.x = nx; if (ok(player.x, nz)) player.z = nz;
     player.heading = Math.atan2(dx, dz); player.walk += dt * spd * 1.6; } else player.walk *= 0.8;
