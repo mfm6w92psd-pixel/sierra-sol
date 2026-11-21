@@ -325,6 +325,7 @@ function makeEconomy(THREE) {
     if (v.mesh) {
       v.mesh.visible = false;
       if (v.mesh.parent) v.mesh.parent.remove(v.mesh);
+      if (v.shadow && v.shadow.parent) v.shadow.parent.remove(v.shadow);
     }
     const list = window.__game && window.__game.vehicles;
     if (list) {
@@ -343,7 +344,10 @@ function makeEconomy(THREE) {
     const gy = (window.__game && window.__game.world && window.__game.world.heightAt) ? window.__game.world.heightAt(x, z) : 0;
     g.position.set(x, gy, z); g.rotation.y = heading;
     (_scene || (window.__game && window.__game.scene)).add(g);
-    const v = { x, z, heading, speed: 0, color, name: o.name || 'Mesa', mesh: g, health: o.health || 100 };
+    const sc = _scene || (window.__game && window.__game.scene);
+    const sh = new THREE.Mesh(new THREE.CircleGeometry(0.5, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
+    sh.scale.set(2.4, 4.6, 1); sh.rotation.x = -Math.PI / 2; sh.position.set(x, gy + 0.05, z); if (sc) sc.add(sh);
+    const v = { x, z, y: gy, heading, speed: 0, drift: 0, shadow: sh, color, name: o.name || 'Mesa', mesh: g, health: o.health || 100 };
     const list = window.__game && window.__game.vehicles;
     if (list) list.push(v);
     return v;

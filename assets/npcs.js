@@ -37,11 +37,16 @@ export function initNPCs({ THREE, scene, world, player, vehicles = [], state = {
     p.di = a; p.dj = b; p.ti = p.i + a; p.tj = p.j + b;
   }
   function spawnIn(t, near) {
-    for (let k = 0; k < 12; k++) {
-      const i = (Math.random() * t.xs.length) | 0, j = (Math.random() * t.zs.length) | 0, [x, z] = nodePos(t, i, j), d = Math.hypot(x - player.x, z - player.z);
-      if (d < (near ? 0 : 45) || d > 190 || (world.isWater && world.isWater(x, z))) continue;
+    // only nodes within reach of the player, so tries rarely miss
+    const R = 35 + 115 * Math.pow(Math.random(), 1.7), ii = [], jj = []; t.xs.forEach((x, i) => { if (Math.abs(x - player.x) < R) ii.push(i); }); t.zs.forEach((z, j) => { if (Math.abs(z - player.z) < R) jj.push(j); });
+    if (!ii.length || !jj.length) return;
+    for (let k = 0; k < 16; k++) {
+      const i = pick(ii), j = pick(jj), [x, z] = nodePos(t, i, j), d = Math.hypot(x - player.x, z - player.z);
+      if (d < (near ? 8 : 25) || d > 150 || (world.isWater && world.isWater(x, z))) continue;
       const p = { mesh: makePerson(), town: t, i, j, di: 0, dj: 0, x, z, h: 0, spd: 1.1 + Math.random() * 0.6, phase: Math.random() * 6, mode: 'walk', t: 0, vx: 0, vz: 0 };
-      chooseNext(p); list.push(p); return p;
+      // start part-way along a sidewalk so groups don't all stand on corners
+      chooseNext(p); const [tx, tz] = nodePos(t, p.ti, p.tj), f = Math.random() * 0.9; p.x += (tx - x) * f; p.z += (tz - z) * f;
+      list.push(p); return p;
     }
   }
   function remove(p) { scene.remove(p.mesh.root); list.splice(list.indexOf(p), 1); }
@@ -55,8 +60,10 @@ export function initNPCs({ THREE, scene, world, player, vehicles = [], state = {
   function update(dt) {
     // which towns are near the player
     const near = towns.filter(t => Math.abs(player.x - t.x) < t.r + 180 && Math.abs(player.z - t.z) < t.r + 180);
-    for (let k = list.length - 1; k >= 0; k--) { const p = list[k]; if (Math.hypot(p.x - player.x, p.z - player.z) > 240 || !near.includes(p.town)) remove(p); }
-    if ((spawnT -= dt) <= 0 && near.length) { spawnT = 0.15; const max = MAX() * (near.some(t => t.kind === 'village') && !near.some(t => t.kind === 'city') ? 0.4 : 1); if (list.length < max) spawnIn(pick(near), list.length < 4); }
+    for (let k = list.length - 1; k >= 0; k--) { const p = list[k]; if (Math.hypot(p.x - player.x, p.z - player.z) > 200 || !near.includes(p.town)) remove(p); }
+    if ((spawnT -= dt) <= 0 && near.length) { spawnT = 0.1; const max = Math.round(MAX() * (near.some(t => t.kind === 'village') && !near.some(t => t.kind === 'city') ? 0.4 : 1));
+      // fill fast when the street is empty (first visit, after a teleport), then top up one at a time
+      for (let n = list.length < max / 2 ? 6 : 1; n > 0 && list.length < max; n--) spawnIn(pick(near), list.length < max / 2); }
     for (const p of list) {
       const m = p.mesh;
       if (p.mode === 'down') {
