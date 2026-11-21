@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { buildWorld } from './assets/world.js';
 import { initEconomy } from './assets/economy.js';
 import { initNPCs } from './assets/npcs.js';
-const VERSION = '0.6', SAVE_KEY = 'sierrasol_save_v1';
+const VERSION = '0.7', SAVE_KEY = 'sierrasol_save_v1';
 const $ = id => document.getElementById(id);
 const rand = s => () => ((s = (s * 16807) % 2147483647) / 2147483647);
 $('ver').textContent = 'v' + VERSION;
@@ -83,10 +83,15 @@ let msgT = 0; function showMsg(t, d = 2.5) { $('msg').textContent = t; $('msg').
 const economy = initEconomy({ THREE, scene, player, state, addCol, showMsg, cities: world.cities, isBusy: () => state.uiOpen });
 const npcs = initNPCs({ THREE, scene, world, player, vehicles, state, showMsg, settings });
 let lastPunch = false;
+const drops = [], dropGeo = new THREE.BoxGeometry(0.5, 0.12, 0.3), dropMat = new THREE.MeshLambertMaterial({ color: 0x3fc45a, emissive: 0x124a1c });
+function dropCash(x, z, amt) { const m = new THREE.Mesh(dropGeo, dropMat); m.position.set(x, H(x, z) + 0.3, z); scene.add(m); drops.push({ x, z, amt, m, t: 40 }); }
+function updateDrops(dt) { for (let i = drops.length - 1; i >= 0; i--) { const d = drops[i]; d.t -= dt; d.m.rotation.y += dt * 3; d.m.position.y = H(d.x, d.z) + 0.35 + Math.sin(d.t * 4) * 0.08;
+  const got = !player.car && Math.hypot(d.x - player.x, d.z - player.z) < 1.6; if (got) { player.money += d.amt; showMsg(`+$${d.amt}`, 1); }
+  if (got || d.t <= 0) { scene.remove(d.m); drops.splice(i, 1); } } }
 function updatePunch() { const p = input.attack && !player.car, edge = p && !lastPunch; lastPunch = p; if (!edge) return;
   for (const n of npcs.list) { const d = Math.hypot(n.x - player.x, n.z - player.z); if (n.mode === 'down' || d > 1.9 || Math.cos(Math.atan2(n.x - player.x, n.z - player.z) - player.heading) < 0.3) continue;
     n.mode = 'down'; n.t = 4 + Math.random() * 2; n.fall = 0; n.vx = Math.sin(player.heading) * 4; n.vz = Math.cos(player.heading) * 4;
-    if (Math.random() < 0.4) { const c = 5 + ((Math.random() * 30) | 0); player.money += c; showMsg(`Pow!  +$${c}`, 1.2); } else showMsg('Pow!', 0.8);
+    if (Math.random() < 0.4) dropCash(n.x + Math.sin(player.heading) * 1.5, n.z + Math.cos(player.heading) * 1.5, 5 + ((Math.random() * 30) | 0)); showMsg('Pow!', 0.8);
     for (const q of npcs.list) if (q !== n && q.mode !== 'down' && Math.hypot(q.x - n.x, q.z - n.z) < 30) { const a = Math.atan2(q.x - n.x, q.z - n.z); q.mode = 'flee'; q.t = 4; q.vx = Math.sin(a) * 4.5; q.vz = Math.cos(a) * 4.5; }
     break; } }
 
@@ -129,10 +134,11 @@ function updateCar(v, dt) {
   const dir = v.heading - v.drift, nx = v.x + Math.sin(dir) * v.speed * dt, nz = v.z + Math.cos(dir) * v.speed * dt, ng = H(nx, nz);
   let blocked = hit(nx, nz, 1.2) || WET(nx, nz) || ng - v.y > 2.5; if (!blocked) for (const o of vehicles) if (o !== v && Math.hypot(o.x - nx, o.z - nz) < 3.2) { blocked = true; if (mine && Math.abs(v.speed) > 8) o.speed += v.speed * 0.5; break; }
   if (blocked) { if (mine && Math.abs(v.speed) > 14) { v.health -= Math.abs(v.speed) * 0.5; showMsg('Crash!', 0.8); } v.speed *= -0.25; } else { v.x = nx; v.z = nz; }
+  if (!Number.isFinite(v.y)) v.y = H(v.x, v.z); if (!Number.isFinite(v.drift)) v.drift = 0;
   const gy = H(v.x, v.z); v.y += (gy - v.y) * Math.min(1, dt * 12);
   const fx = Math.sin(v.heading) * 2, fz = Math.cos(v.heading) * 2, pitch = Math.atan2(H(v.x + fx, v.z + fz) - H(v.x - fx, v.z - fz), 4);
   v.mesh.position.set(v.x, v.y, v.z); v.mesh.rotation.set(0, v.heading, 0); v.mesh.rotateX(-pitch);
-  v.shadow.position.set(v.x, v.y + 0.05, v.z); v.shadow.rotation.z = v.heading;
+  if (v.shadow) { v.shadow.position.set(v.x, v.y + 0.05, v.z); v.shadow.rotation.z = v.heading; }
   if (mine) { player.x = v.x; player.z = v.z; player.y = v.y; player.heading = v.heading; }
 }
 // ---------- traffic along roads ----------
@@ -150,16 +156,21 @@ function updateTraffic(dt) { if ((trafficT -= dt) > 0) return; trafficT = 1;
   const v = addCar(x + Math.cos(h) * -side, z - Math.sin(h) * -side, h); v.ai = { tx: fwd ? r.x2 : r.x1, tz: fwd ? r.z2 : r.z1, cruise: 12 + Math.random() * 8 }; v.speed = v.ai.cruise;
 }
 let camD = 6;
+// height of the drawn terrain mesh (50 m grid, PlaneGeometry triangulation) - can sit above heightAt on concave slopes
+function meshH(x, z) { const S = world.size || 6000, g = 2 * S / 240, u0 = (x + S) / g, v0 = (z + S) / g, ix = Math.floor(u0), iz = Math.floor(v0), u = u0 - ix, v = v0 - iz;
+  const X = -S + ix * g, Z = -S + iz * g, a = H(X, Z), b = H(X, Z + g), c = H(X + g, Z + g), d = H(X + g, Z);
+  return u + v <= 1 ? a + (d - a) * u + (b - a) * v : c + (b - c) * (1 - u) + (d - c) * (1 - v); }
+const GH = (x, z) => Math.max(H(x, z), meshH(x, z));
 function updateCamera(dt) {
   const t = player.car ? { x: player.car.x, z: player.car.z, d: 9 + Math.abs(player.car.speed) * 0.06, h: 3.5 } : { x: player.x, z: player.z, d: 5.5, h: 2.2 };
   if (player.car && Math.abs(player.car.speed) > 3 && lookId == null) { const want = player.car.heading + Math.PI; let d = want - state.camYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); state.camYaw += d * Math.min(1, dt * (2.5 + Math.abs(player.car.speed) * 0.08)); }
   const cy = Math.cos(state.camPitch); let d = t.d, ty = player.y + 1.5;
   for (let k = 1; k <= 8; k++) { const f = k / 8, sx = t.x + Math.sin(state.camYaw) * d * cy * f, sz = t.z + Math.cos(state.camYaw) * d * cy * f, sy = ty + (t.h - 1.5 + Math.sin(state.camPitch) * d) * f;
-    const lx = Math.cos(state.camYaw) * 2.5, lz = -Math.sin(state.camYaw) * 2.5, gh = Math.max(H(sx, sz), H(sx + lx, sz + lz), H(sx - lx, sz - lz));
+    const lx = Math.cos(state.camYaw) * 2.5, lz = -Math.sin(state.camYaw) * 2.5, gh = Math.max(GH(sx, sz), GH(sx + lx, sz + lz), GH(sx - lx, sz - lz));
     if (gh + 1.6 > sy) { d = Math.max(2.2, d * (k - 1) / 8); break; } }
   camD += (d - camD) * Math.min(1, dt * (d < camD ? 20 : 3));
-  const x = t.x + Math.sin(state.camYaw) * camD * cy, z = t.z + Math.cos(state.camYaw) * camD * cy, hMax = Math.max(H(x, z), H(x + 2, z), H(x - 2, z), H(x, z + 2), H(x, z - 2), H((x + t.x) / 2, (z + t.z) / 2));
-  camera.position.set(x, Math.max(hMax + 2, ty + (t.h - 1.5) + Math.sin(state.camPitch) * camD), z); camera.lookAt(t.x, ty, t.z);
+  const x = t.x + Math.sin(state.camYaw) * camD * cy, z = t.z + Math.cos(state.camYaw) * camD * cy, hMax = Math.max(GH(x, z), GH(x + 2, z), GH(x - 2, z), GH(x, z + 2), GH(x, z - 2), GH((x + t.x) / 2, (z + t.z) / 2));
+  camera.position.set(x, Math.max(hMax + 2, ty + (t.h - 1.5) + Math.sin(state.camPitch) * camD), z); if (player.car) { const fx = -Math.sin(state.camYaw) * 5, fz = -Math.cos(state.camYaw) * 5, ah = Math.max(ty, GH(t.x + fx, t.z + fz) + 1.5); camera.lookAt(t.x + fx, ah, t.z + fz); } else camera.lookAt(t.x, ty, t.z);
 }
 function updateSky(dt) {
   state.time = (state.time + dt / 600) % 1; const a = state.time * Math.PI * 2, day = Math.max(0, Math.sin(a));
@@ -212,7 +223,7 @@ function loop(now) {
   if (state.started && !state.paused && !state.uiOpen) {
     if (player.car) updateCar(player.car, dt); else updateFoot(dt);
     for (const v of vehicles) if (v !== player.car && (v.ai || Math.abs(v.speed) > 0.01)) updateCar(v, dt);
-    updateTraffic(dt); npcs.update(dt); updatePunch();
+    updateTraffic(dt); npcs.update(dt); updatePunch(); updateDrops(dt);
     economy.update(dt);
   }
   player.mesh.position.set(player.x, player.y, player.z); player.mesh.rotation.y = player.heading; player.shadow.visible = !player.car; player.shadow.position.set(player.x, H(player.x, player.z) + 0.05, player.z);
