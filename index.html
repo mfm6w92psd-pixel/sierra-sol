@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><title>Sierra Sol</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head><body>
+<div id="start"><h1>SIERRA SOL</h1><p class="sub">An original open-world crime game</p>
+<button id="btnContinue">Continue</button><button id="btnNew">New Game</button>
+<p class="hint">Turn your phone sideways. Left side moves, right side looks.</p><p id="ver"></p></div>
+<div id="hud" class="hidden">
+  <div id="money">$0</div><div id="hp"><i></i></div><div id="stars"></div><div id="place"></div>
+  <canvas id="mini" width="120" height="120"></canvas>
+  <div id="stick"><div id="knob"></div></div>
+  <button class="b" id="bJump">JUMP</button><button class="b" id="bSprint">RUN</button>
+  <button class="b" id="bAttack">HIT</button><button class="b" id="bEnter">CAR</button>
+  <button id="bPause">❚❚</button><div id="msg"></div>
+</div>
+<div id="pause" class="hidden"><h2>Paused</h2><button data-a="resume">Resume</button><button data-a="save">Save</button><button data-a="load">Load</button><button data-a="quit">Title screen</button></div>
+<script type="module" src="main.js"></script>
+</body></html>
