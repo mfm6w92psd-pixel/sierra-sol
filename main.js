@@ -3,23 +3,24 @@ import * as THREE from 'three';
 import { buildWorld } from './assets/world.js';
 import { initEconomy } from './assets/economy.js';
 import { initNPCs } from './assets/npcs.js';
-const VERSION = '0.5', SAVE_KEY = 'sierrasol_save_v1';
+const VERSION = '0.6', SAVE_KEY = 'sierrasol_save_v1';
 const $ = id => document.getElementById(id);
 const rand = s => () => ((s = (s * 16807) % 2147483647) / 2147483647);
 $('ver').textContent = 'v' + VERSION;
 
 // ---------- renderer ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const _q = (() => { try { return JSON.parse(localStorage.getItem('sierrasol_settings') || '{}').quality; } catch (e) { return null; } })() || (/iPhone|Android/i.test(navigator.userAgent) ? 'low' : 'high');
+const renderer = new THREE.WebGLRenderer({ antialias: _q !== 'low', powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene(); scene.fog = new THREE.Fog(0xf3c98b, 250, 1600);
-const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.5, 4000);
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.3, 4000);
 const hemi = new THREE.HemisphereLight(0xffffff, 0x8a6a40, 1.1); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0d0, 1.6); scene.add(sun);
 const settings = (() => { try { return JSON.parse(localStorage.getItem('sierrasol_settings') || '{}'); } catch (e) { return {}; } })();
 if (!settings.quality) settings.quality = /iPhone|Android/i.test(navigator.userAgent) ? 'low' : 'high';
 function applyQuality() { const lo = settings.quality === 'low'; renderer.setPixelRatio(lo ? 1 : Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
   scene.fog.near = lo ? 150 : 250; scene.fog.far = lo ? 900 : 1600; camera.far = lo ? 1200 : 4000; camera.updateProjectionMatrix();
-  const b = document.querySelector('[data-a=quality]'); if (b) b.textContent = 'Graphics: ' + (lo ? 'Low (faster)' : 'High'); try { localStorage.setItem('sierrasol_settings', JSON.stringify(settings)); } catch (e) {} }
+  const b = document.querySelector('[data-a=quality]'); if (b) b.textContent = 'Graphics: ' + (lo ? 'Low (faster)' : 'High') + (lo !== (_q === 'low') ? ' · reload for full effect' : ''); try { localStorage.setItem('sierrasol_settings', JSON.stringify(settings)); } catch (e) {} }
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
 // ---------- collision ----------
@@ -151,13 +152,14 @@ function updateTraffic(dt) { if ((trafficT -= dt) > 0) return; trafficT = 1;
 let camD = 6;
 function updateCamera(dt) {
   const t = player.car ? { x: player.car.x, z: player.car.z, d: 9 + Math.abs(player.car.speed) * 0.06, h: 3.5 } : { x: player.x, z: player.z, d: 5.5, h: 2.2 };
-  if (player.car && Math.abs(player.car.speed) > 3 && lookId == null) { const want = player.car.heading + Math.PI; let d = want - state.camYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); state.camYaw += d * Math.min(1, dt * 2.5); }
+  if (player.car && Math.abs(player.car.speed) > 3 && lookId == null) { const want = player.car.heading + Math.PI; let d = want - state.camYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); state.camYaw += d * Math.min(1, dt * (2.5 + Math.abs(player.car.speed) * 0.08)); }
   const cy = Math.cos(state.camPitch); let d = t.d, ty = player.y + 1.5;
   for (let k = 1; k <= 8; k++) { const f = k / 8, sx = t.x + Math.sin(state.camYaw) * d * cy * f, sz = t.z + Math.cos(state.camYaw) * d * cy * f, sy = ty + (t.h - 1.5 + Math.sin(state.camPitch) * d) * f;
-    if (H(sx, sz) + 0.8 > sy) { d = Math.max(2.2, d * (k - 1) / 8); break; } }
+    const lx = Math.cos(state.camYaw) * 2.5, lz = -Math.sin(state.camYaw) * 2.5, gh = Math.max(H(sx, sz), H(sx + lx, sz + lz), H(sx - lx, sz - lz));
+    if (gh + 1.6 > sy) { d = Math.max(2.2, d * (k - 1) / 8); break; } }
   camD += (d - camD) * Math.min(1, dt * (d < camD ? 20 : 3));
-  const x = t.x + Math.sin(state.camYaw) * camD * cy, z = t.z + Math.cos(state.camYaw) * camD * cy, hMax = Math.max(H(x, z), H((x + t.x) / 2, (z + t.z) / 2));
-  camera.position.set(x, Math.max(hMax + 1.2, ty + (t.h - 1.5) + Math.sin(state.camPitch) * camD), z); camera.lookAt(t.x, ty, t.z);
+  const x = t.x + Math.sin(state.camYaw) * camD * cy, z = t.z + Math.cos(state.camYaw) * camD * cy, hMax = Math.max(H(x, z), H(x + 2, z), H(x - 2, z), H(x, z + 2), H(x, z - 2), H((x + t.x) / 2, (z + t.z) / 2));
+  camera.position.set(x, Math.max(hMax + 2, ty + (t.h - 1.5) + Math.sin(state.camPitch) * camD), z); camera.lookAt(t.x, ty, t.z);
 }
 function updateSky(dt) {
   state.time = (state.time + dt / 600) % 1; const a = state.time * Math.PI * 2, day = Math.max(0, Math.sin(a));
@@ -219,4 +221,4 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
-window.__game = { npcs, player, state, vehicles, world, saveGame, loadGame, toggleCar };
+window.__game = { camera, npcs, player, state, vehicles, world, saveGame, loadGame, toggleCar };

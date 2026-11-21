@@ -15,6 +15,7 @@ export function initEconomy(ctx) {
 }
 
 function makeEconomy(THREE) {
+  let _scene = null;
   const SHIRTS = [
     { id: 'ember', name: 'Sunset Orange', color: 0xe8742c, price: 0 },
     { id: 'lagoon', name: 'Lagoon Teal', color: 0x2e7d6b, price: 40 },
@@ -341,7 +342,7 @@ function makeEconomy(THREE) {
     }
     const gy = (window.__game && window.__game.world && window.__game.world.heightAt) ? window.__game.world.heightAt(x, z) : 0;
     g.position.set(x, gy, z); g.rotation.y = heading;
-    scene.add(g);
+    (_scene || (window.__game && window.__game.scene)).add(g);
     const v = { x, z, heading, speed: 0, color, name: o.name || 'Mesa', mesh: g, health: o.health || 100 };
     const list = window.__game && window.__game.vehicles;
     if (list) list.push(v);
@@ -630,6 +631,7 @@ function makeEconomy(THREE) {
 
   function init({ scene, player, state, addCol, showMsg, cities, isBusy }) {
     if (!scene || !player) throw new Error('initEconomy needs { scene, player }');
+    _scene = scene;
     prepPlayer(player);
     applyLook();
     for (const s of STORES) buildStore(scene, s, addCol, cities);
