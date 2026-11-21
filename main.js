@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { buildWorld } from './assets/world.js';
 import { initEconomy } from './assets/economy.js';
-const VERSION = '0.2', SAVE_KEY = 'sierrasol_save_v1';
+const VERSION = '0.3', SAVE_KEY = 'sierrasol_save_v1';
 const $ = id => document.getElementById(id);
 const rand = s => () => ((s = (s * 16807) % 2147483647) / 2147483647);
 $('ver').textContent = 'v' + VERSION;
@@ -14,6 +14,11 @@ const scene = new THREE.Scene(); scene.fog = new THREE.Fog(0xf3c98b, 250, 1600);
 const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.5, 4000);
 const hemi = new THREE.HemisphereLight(0xffffff, 0x8a6a40, 1.1); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0d0, 1.6); scene.add(sun);
+const settings = (() => { try { return JSON.parse(localStorage.getItem('sierrasol_settings') || '{}'); } catch (e) { return {}; } })();
+if (!settings.quality) settings.quality = /iPhone|Android/i.test(navigator.userAgent) ? 'low' : 'high';
+function applyQuality() { const lo = settings.quality === 'low'; renderer.setPixelRatio(lo ? 1 : Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+  scene.fog.near = lo ? 150 : 250; scene.fog.far = lo ? 900 : 1600; camera.far = lo ? 1200 : 4000; camera.updateProjectionMatrix();
+  const b = document.querySelector('[data-a=quality]'); if (b) b.textContent = 'Graphics: ' + (lo ? 'Low (faster)' : 'High'); try { localStorage.setItem('sierrasol_settings', JSON.stringify(settings)); } catch (e) {} }
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
 // ---------- collision ----------
@@ -134,11 +139,16 @@ function updateTraffic(dt) { if ((trafficT -= dt) > 0) return; trafficT = 1;
   const fwd = Math.random() < 0.5, h = Math.atan2(fwd ? r.x2 - r.x1 : r.x1 - r.x2, fwd ? r.z2 - r.z1 : r.z1 - r.z2), side = (r.w || 14) / 4;
   const v = addCar(x + Math.cos(h) * -side, z - Math.sin(h) * -side, h); v.ai = { tx: fwd ? r.x2 : r.x1, tz: fwd ? r.z2 : r.z1, cruise: 12 + Math.random() * 8 }; v.speed = v.ai.cruise;
 }
+let camD = 6;
 function updateCamera(dt) {
   const t = player.car ? { x: player.car.x, z: player.car.z, d: 9 + Math.abs(player.car.speed) * 0.06, h: 3.5 } : { x: player.x, z: player.z, d: 5.5, h: 2.2 };
   if (player.car && Math.abs(player.car.speed) > 3 && lookId == null) { const want = player.car.heading + Math.PI; let d = want - state.camYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); state.camYaw += d * Math.min(1, dt * 2.5); }
-  const cy = Math.cos(state.camPitch), x = t.x + Math.sin(state.camYaw) * t.d * cy, z = t.z + Math.cos(state.camYaw) * t.d * cy;
-  camera.position.set(x, Math.max(H(x, z) + 1.2, player.y + t.h + Math.sin(state.camPitch) * t.d), z); camera.lookAt(t.x, player.y + 1.5, t.z);
+  const cy = Math.cos(state.camPitch); let d = t.d, ty = player.y + 1.5;
+  for (let k = 1; k <= 8; k++) { const f = k / 8, sx = t.x + Math.sin(state.camYaw) * d * cy * f, sz = t.z + Math.cos(state.camYaw) * d * cy * f, sy = ty + (t.h - 1.5 + Math.sin(state.camPitch) * d) * f;
+    if (H(sx, sz) + 0.8 > sy) { d = Math.max(2.2, d * (k - 1) / 8); break; } }
+  camD += (d - camD) * Math.min(1, dt * (d < camD ? 20 : 3));
+  const x = t.x + Math.sin(state.camYaw) * camD * cy, z = t.z + Math.cos(state.camYaw) * camD * cy, hMax = Math.max(H(x, z), H((x + t.x) / 2, (z + t.z) / 2));
+  camera.position.set(x, Math.max(hMax + 1.2, ty + (t.h - 1.5) + Math.sin(state.camPitch) * camD), z); camera.lookAt(t.x, ty, t.z);
 }
 function updateSky(dt) {
   state.time = (state.time + dt / 600) % 1; const a = state.time * Math.PI * 2, day = Math.max(0, Math.sin(a));
@@ -155,8 +165,8 @@ function drawMini() {
 }
 function openMap() { if (!world.mapCanvas || !state.started) return; state.uiOpen = true; const c = $('bigmap'), g = c.getContext('2d'); g.drawImage(world.mapCanvas, 0, 0);
   const px = (player.x + world.size) / 12, pz = (player.z + world.size) / 12; g.fillStyle = '#ff0'; g.strokeStyle = '#000'; g.lineWidth = 3; g.beginPath(); g.arc(px, pz, 12, 0, 7); g.fill(); g.stroke();
-  $('mapview').classList.remove('hidden'); }
-$('mini').addEventListener('click', openMap); $('mapview').addEventListener('click', () => { $('mapview').classList.add('hidden'); state.uiOpen = false; });
+  $('mapview').classList.remove('hidden'); $('hud').classList.add('hidden'); }
+$('mini').addEventListener('click', openMap); $('mapview').addEventListener('click', () => { $('mapview').classList.add('hidden'); $('hud').classList.remove('hidden'); state.uiOpen = false; });
 addEventListener('keydown', e => { if (e.key.toLowerCase() === 'm') openMap(); });
 function placeName() { const r = world.onRoad && world.onRoad(player.x, player.z); for (const c of world.places || world.cities) if (c.r && Math.abs(player.x - c.x) < c.r + 40 && Math.abs(player.z - c.z) < c.r + 40) return c.name; if (r) return r.name;
   if (world.places) { const m = world.places.find(p => p.kind === 'mountain'); if (m && Math.hypot(player.x - m.x, player.z - m.z) < 900) return m.name; } return 'Countryside'; }
@@ -178,8 +188,10 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && sta
 function setPause(p) { state.paused = p; $('pause').classList.toggle('hidden', !p); }
 $('bPause').addEventListener('click', () => setPause(true));
 $('pause').addEventListener('click', e => { const a = e.target.dataset.a; if (!a) return; if (a === 'resume') setPause(false); if (a === 'save') { saveGame(); setPause(false); } if (a === 'load') { loadGame(); setPause(false); }
+  if (a === 'quality') { settings.quality = settings.quality === 'low' ? 'high' : 'low'; applyQuality(); return; }
   if (a === 'quit') { saveGame(true); state.started = false; $('pause').classList.add('hidden'); $('hud').classList.add('hidden'); $('start').classList.remove('hidden'); } });
 function begin(cont) { if (!(cont && loadGame())) newGame(); $('start').classList.add('hidden'); $('hud').classList.remove('hidden'); state.started = true; setPause(false); last = performance.now(); }
+applyQuality();
 $('btnNew').addEventListener('click', () => begin(false)); $('btnContinue').addEventListener('click', () => begin(true)); refreshContinue();
 
 // ---------- loop ----------
@@ -194,7 +206,7 @@ function loop(now) {
   }
   player.mesh.position.set(player.x, player.y, player.z); player.mesh.rotation.y = player.heading; player.shadow.visible = !player.car; player.shadow.position.set(player.x, H(player.x, player.z) + 0.05, player.z);
   updateSky(state.started ? dt : 0); updateCamera(dt);
-  if (state.started) { if ((msgT -= dt) <= 0) $('msg').classList.remove('show'); $('money').textContent = '$' + player.money.toLocaleString(); $('hp').firstElementChild.style.width = player.health + '%'; $('stars').textContent = '★'.repeat(state.wanted); $('place').textContent = placeName() + (player.car ? `  ·  ${Math.round(Math.abs(player.car.speed) * 3.6)} km/h` : ''); drawMini(); }
+  if (state.started) { if ((msgT -= dt) <= 0) $('msg').classList.remove('show'); $('money').textContent = '$' + player.money.toLocaleString(); $('hp').firstElementChild.style.width = player.health + '%'; $('stars').textContent = '★'.repeat(state.wanted); $('bSprint').textContent = player.car ? 'BRAKE' : 'RUN'; $('place').textContent = placeName() + (player.car ? `  ·  ${Math.round(Math.abs(player.car.speed) * 3.6)} km/h` : ''); drawMini(); }
   renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
